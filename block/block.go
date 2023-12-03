@@ -2,16 +2,13 @@ package block
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"time"
 )
 
-// Transaction represents a transaction in the blockchain.
 type Transaction struct {
 	Data []byte
 }
 
-// Block represents a block in the blockchain.
 type Block struct {
 	Timestamp     int64
 	Transactions  []*Transaction
@@ -19,30 +16,62 @@ type Block struct {
 	Hash          []byte
 }
 
-// NewBlock creates a new block.
-func NewBlock(transactions []*Transaction, prevBlockHash []byte) *Block {
-	block := &Block{
+type Blockchain struct {
+	Blocks []*Block
+}
+
+func NewBlockchain() *Blockchain {
+	return &Blockchain{Blocks: []*Block{genesisBlock()}}
+}
+
+func (bc *Blockchain) AddBlock(transactions []*Transaction) {
+	prevBlock := bc.Blocks[len(bc.Blocks)-1]
+	newBlock := generateBlock(prevBlock, transactions)
+	bc.Blocks = append(bc.Blocks, newBlock)
+}
+
+func (bc *Blockchain) GetLatestBlock() *Block {
+	return bc.Blocks[len(bc.Blocks)-1]
+}
+
+func (bc *Blockchain) GetBlocks() []*Block {
+	return bc.Blocks
+}
+
+
+
+
+func generateBlock(prevBlock *Block, transactions []*Transaction) *Block {
+	newBlock := &Block{
 		Timestamp:     time.Now().Unix(),
-		PrevBlockHash: prevBlockHash,
 		Transactions:  transactions,
+		PrevBlockHash: prevBlock.Hash,
 	}
 
-	block.setHash()
-	return block
+	newBlock.SetHash()
+	return newBlock
 }
 
-// setHash calculates and sets the hash of the block.
-func (block *Block) setHash() {
-	headers := []byte(fmt.Sprintf("%d%s%s", block.Timestamp, block.PrevBlockHash, block.getTransactionsString()))
+func (b *Block) SetHash() {
+	headers := append(b.PrevBlockHash, b.HashTransaction()...)
+	headers = append(headers, []byte(string(b.Timestamp))...)
 	hash := sha256.Sum256(headers)
-	block.Hash = hash[:]
+	b.Hash = hash[:]
 }
 
-// getTransactionsString returns a concatenated string of transaction data.
-func (block *Block) getTransactionsString() string {
-	var transactionsData string
-	for _, tx := range block.Transactions {
-		transactionsData += string(tx.Data)
+func (b *Block) HashTransaction() []byte {
+	var transactionsData []byte
+	for _, transaction := range b.Transactions {
+		transactionsData = append(transactionsData, transaction.Data...)
 	}
-	return transactionsData
+	transactionHash := sha256.Sum256(transactionsData)
+	return transactionHash[:]
+}
+
+func genesisBlock() *Block {
+	return &Block{
+		Timestamp:     time.Now().Unix(),
+		Transactions:  []*Transaction{},
+		PrevBlockHash: []byte{},
+	}
 }
