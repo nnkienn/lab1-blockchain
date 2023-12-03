@@ -1,8 +1,8 @@
-package block
+package merkletree
 
 import (
 	"crypto/sha256"
-	"blockchain/block"
+	"github.com/nnkienn/lab1-blockchain/block"
 )
 
 type MerkleNode struct {
