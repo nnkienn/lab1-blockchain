@@ -1,30 +1,31 @@
-package client
+package network
 
 import (
+	"github.com/nnkienn/lab1-blockchain/server/blockchain"
 	"bufio"
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"net"
 	"strings"
 	"sync"
-
-	"github.com/nnkienn/lab1-blockchain/server/blockchain"
 )
 
 var nodes = []string{"127.0.0.1:3001", "127.0.0.1:3002", "127.0.0.1:3003"}
 var chainMutex sync.Mutex
 
 func main() {
-	chain := blockchain.NewBlockchain()
+	chain := block.BlockChain{}
 
 	for _, node := range nodes {
-		go startServer(node, chain)
+		go startServer(node, &chain)
 	}
 
 	select {}
 }
 
-func startServer(address string, chain *blockchain.Blockchain) {
+func startServer(address string, chain *block.BlockChain) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatal(err)
@@ -44,7 +45,7 @@ func startServer(address string, chain *blockchain.Blockchain) {
 	}
 }
 
-func handleCommand(command string, chain *blockchain.Blockchain, conn net.Conn) {
+func handleCommand(command string, chain *block.BlockChain, conn net.Conn) {
 	parts := strings.Fields(command)
 	switch parts[0] {
 	case "printchain":
@@ -52,40 +53,12 @@ func handleCommand(command string, chain *blockchain.Blockchain, conn net.Conn) 
 	case "hello":
 		sendHelloResponse(conn)
 	case "addtransaction":
-		if len(parts) != 2 {
-			fmt.Fprintln(conn, "Invalid addtransaction command. Usage: addtransaction <transaction_data>")
-			return
-		}
-		data := parts[1]
-		addTransactionAndMineBlock(chain, conn, data)
+		addTransactionAndMineBlock(chain, conn)
 	case "addnode":
 		addNode(parts, conn)
 	default:
 		fmt.Fprintln(conn, "Invalid command")
 	}
-}
-
-func addTransactionAndMineBlock(chain *blockchain.Blockchain, conn net.Conn, data string) {
-	chainMutex.Lock()
-	defer chainMutex.Unlock()
-
-	latestBlock := chain.GetLatestBlock()
-
-	// Tạo một giao dịch mới và thêm vào khối hiện tại
-	transaction := &blockchain.Transaction{Data: []byte(data)}
-	latestBlock.Transactions = append(latestBlock.Transactions, transaction)
-
-	// Đối với mục đích minh họa, bạn có thể thêm điều kiện để chỉ khai thác khi đạt đến số lượng giao dịch mong muốn.
-	// Ví dụ: if len(latestBlock.Transactions) >= 2 { ... }
-	// Trong thực tế, điều này sẽ được xử lý thông qua các chính sách khai thác thích hợp.
-
-	// Tạo khối mới và thêm vào chuỗi blockchain
-	transactions := append([]*blockchain.Transaction{}, latestBlock.Transactions...)
-	newBlock := blockchain.GenerateBlock(latestBlock, transactions)
-	chain.AddBlock(newBlock.Transactions)
-
-	// Gửi thông báo về việc thêm giao dịch và khối thành công
-	fmt.Fprintln(conn, "Transaction added and block mined successfully.")
 }
 
 func addNode(parts []string, conn net.Conn) {
@@ -99,7 +72,7 @@ func addNode(parts []string, conn net.Conn) {
 	fmt.Fprintf(conn, "Node %s added to the network.\n", newNode)
 }
 
-func handleClient(conn net.Conn, chain *blockchain.Blockchain) {
+func handleClient(conn net.Conn, chain *block.BlockChain) {
 	fmt.Printf("Client connected: %s\n", conn.RemoteAddr().String())
 
 	scanner := bufio.NewScanner(conn)
@@ -115,11 +88,11 @@ func handleClient(conn net.Conn, chain *blockchain.Blockchain) {
 	}
 }
 
-func sendBlockchainInfo(chain *blockchain.Blockchain, conn net.Conn) {
+func sendBlockchainInfo(chain *block.BlockChain, conn net.Conn) {
 	chainMutex.Lock()
 	defer chainMutex.Unlock()
 
-	for _, block := range chain.GetBlocks() {
+	for _, block := range chain.Blocks {
 		blockInfo := fmt.Sprintf("Timestamp: %d\nPrev. hash: %x\n", block.Timestamp, block.PrevBlockHash)
 		for _, transaction := range block.Transactions {
 			blockInfo += fmt.Sprintf("Transaction: %s\n", string(transaction.Data))

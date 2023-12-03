@@ -1,31 +1,29 @@
 package main
 
 import (
-	"bufio"
+	"github.com/nnkienn/lab1-blockchain/server/blockchain"
+	"bytes"
+	"encoding/gob"
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"sync"
-
-	"github.com/nnkienn/lab1-blockchain/server/blockchain"
 )
 
 var nodes = []string{"127.0.0.1:3001", "127.0.0.1:3002", "127.0.0.1:3003"}
 var chainMutex sync.Mutex
 
 func main() {
-	chain := blockchain.NewBlockchain() // Sửa đổi tên package
+	chain := block.BlockChain{}
 
 	for _, node := range nodes {
-		go startServer(node, chain)
+		go startServer(node, &chain)
 	}
 
-	// Chờ người dùng nhập lệnh từ terminal
-	handleUserInput(chain)
+	select {}
 }
 
-func startServer(address string, chain *blockchain.Blockchain) {
+func startServer(address string, chain *block.BlockChain) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatal(err)
@@ -45,67 +43,7 @@ func startServer(address string, chain *blockchain.Blockchain) {
 	}
 }
 
-func handleUserInput(chain *blockchain.Blockchain) {
-	for {
-		fmt.Print("Enter command (addtransaction, printchain, hello, exit): ")
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		command := scanner.Text()
-
-		switch command {
-		case "addtransaction":
-			fmt.Print("Enter transaction data: ")
-			scanner.Scan()
-			data := scanner.Text()
-			handleAddTransaction(data, chain)
-		case "printchain":
-			handlePrintChain(chain)
-		case "hello":
-			handleHello()
-		case "exit":
-			os.Exit(0)
-		default:
-			fmt.Println("Invalid command. Try again.")
-		}
-	}
-}
-
-func handleAddTransaction(data string, chain *blockchain.Blockchain) {
-	// Thêm giao dịch và khai thác một khối mới
-	chainMutex.Lock()
-	defer chainMutex.Unlock()
-
-	latestBlock := chain.GetLatestBlock()
-	transaction := &blockchain.Transaction{Data: []byte(data)}
-	latestBlock.Transactions = append(latestBlock.Transactions, transaction)
-
-	newBlock := blockchain.GenerateBlock(latestBlock, latestBlock.Transactions)
-	chain.AddBlock(newBlock.Transactions)
-
-	fmt.Println("Transaction added and block mined successfully.")
-}
-
-func handlePrintChain(chain *blockchain.Blockchain) {
-	// In ra thông tin chuỗi blockchain
-	chainMutex.Lock()
-	defer chainMutex.Unlock()
-
-	for _, block := range chain.GetBlocks() {
-		blockInfo := fmt.Sprintf("Timestamp: %d\nPrev. hash: %x\n", block.Timestamp, block.PrevBlockHash)
-		for _, transaction := range block.Transactions {
-			blockInfo += fmt.Sprintf("Transaction: %s\n", string(transaction.Data))
-		}
-		blockInfo += fmt.Sprintf("Hash: %x\n", block.Hash)
-
-		fmt.Println(blockInfo)
-	}
-}
-
-func handleHello() {
-	fmt.Println("Hello from node!")
-}
-
-func handleClient(conn net.Conn, chain *blockchain.Blockchain) {
+func handleClient(conn net.Conn, chain *block.BlockChain) {
 	fmt.Printf("Client connected: %s\n", conn.RemoteAddr().String())
 
 	scanner := bufio.NewScanner(conn)
@@ -113,7 +51,34 @@ func handleClient(conn net.Conn, chain *blockchain.Blockchain) {
 		receivedMsg := scanner.Text()
 		fmt.Printf("Received message from client: %s\n", receivedMsg)
 
-		// Xử lý lệnh từ client (nếu cần)
+		if receivedMsg == "printchain" {
+			// Send blockchain information to the client
+			chainMutex.Lock()
+			for _, block := range chain.Blocks {
+				blockInfo := fmt.Sprintf("Timestamp: %d\nPrev. hash: %x\n", block.Timestamp, block.PrevBlockHash)
+				for _, transaction := range block.Transactions {
+					blockInfo += fmt.Sprintf("Transaction: %s\n", string(transaction.Data))
+				}
+				blockInfo += fmt.Sprintf("Hash: %x\n", block.Hash)
+
+				_, err := fmt.Fprintf(conn, "%s\n", blockInfo)
+				if err != nil {
+					log.Println(err)
+					chainMutex.Unlock()
+					return
+				}
+			}
+			chainMutex.Unlock()
+		}
+
+		if receivedMsg == "hello" {
+			responseMsg := "Hello from node!"
+			_, err := fmt.Fprintf(conn, "%s\n", responseMsg)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
