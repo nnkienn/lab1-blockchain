@@ -2,7 +2,7 @@ package merkletree
 
 import (
 	"crypto/sha256"
-	"github.com/nnkienn/lab1-blockchain/block"
+	"github.com/nnkienn/lab1-blockchain/server/blockchain"
 )
 
 type MerkleNode struct {
