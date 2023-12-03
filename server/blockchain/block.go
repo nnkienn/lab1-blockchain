@@ -26,7 +26,7 @@ func NewBlockchain() *Blockchain {
 
 func (bc *Blockchain) AddBlock(transactions []*Transaction) {
 	prevBlock := bc.Blocks[len(bc.Blocks)-1]
-	newBlock := generateBlock(prevBlock, transactions)
+	newBlock := GenerateBlock(prevBlock, transactions)
 	bc.Blocks = append(bc.Blocks, newBlock)
 }
 
@@ -41,15 +41,15 @@ func (bc *Blockchain) GetBlocks() []*Block {
 
 
 
-func generateBlock(prevBlock *Block, transactions []*Transaction) *Block {
-	newBlock := &Block{
-		Timestamp:     time.Now().Unix(),
-		Transactions:  transactions,
-		PrevBlockHash: prevBlock.Hash,
-	}
+func GenerateBlock(prevBlock *Block, transactions []*Transaction) *Block {
+    newBlock := &Block{
+        Timestamp:     time.Now().Unix(),
+        Transactions:  transactions,
+        PrevBlockHash: prevBlock.Hash,
+    }
 
-	newBlock.SetHash()
-	return newBlock
+    newBlock.SetHash()
+    return newBlock
 }
 
 func (b *Block) SetHash() {
