@@ -1,53 +1,32 @@
-package client
+package main
 
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
 	"os"
-	"strings"
 	"sync"
-	"github.com/nnkienn/lab1-blockchain/network"
 
+	"github.com/nnkienn/lab1-blockchain/blockchain"
+	"github.com/nnkienn/lab1-blockchain/network"
 )
 
 var nodes = []string{"127.0.0.1:3001", "127.0.0.1:3002", "127.0.0.1:3003"}
 var chainMutex sync.Mutex
 
 func main() {
-	chain := block.BlockChain{}
+	chain := blockchain.NewBlockchain()
 
 	for _, node := range nodes {
-		go startServer(node, &chain)
+		go network.StartNode(node, &chainMutex, chain)
 	}
 
-	go startClient(&chain)
+	go startClient(&chainMutex, chain)
 
 	select {}
 }
 
-func startServer(address string, chain *block.BlockChain) {
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer listener.Close()
-
-	fmt.Printf("Node started. Listening on %s\n", address)
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-
-		go handleClient(conn, chain)
-	}
-}
-
-func startClient(chain *block.BlockChain) {
+func startClient(chainMutex *sync.Mutex, chain *blockchain.Blockchain) {
 	fmt.Print("Enter client port: ")
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
@@ -62,9 +41,9 @@ func startClient(chain *block.BlockChain) {
 
 		switch command {
 		case "addtransaction":
-			addTransaction(chain)
+			addTransaction(chainMutex, chain)
 		case "printchain":
-			printBlockchain(chain)
+			printBlockchain(chainMutex, chain)
 		case "hello":
 			sendHelloRequest(clientPort)
 		default:
@@ -73,25 +52,25 @@ func startClient(chain *block.BlockChain) {
 	}
 }
 
-func addTransaction(chain *block.BlockChain) {
+func addTransaction(chainMutex *sync.Mutex, chain *blockchain.Blockchain) {
 	fmt.Print("Enter transaction data: ")
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Scan()
 	data := scanner.Text()
 
-	transaction := &block.Transaction{
+	transaction := &blockchain.Transaction{
 		Data: []byte(data),
 	}
 
 	chainMutex.Lock()
 	latestBlock := chain.GetLatestBlock()
-	latestBlock.AddTransaction(transaction.Data)
+	latestBlock.AddTransaction(transaction)
 	chainMutex.Unlock()
 
 	fmt.Println("Transaction added.")
 }
 
-func printBlockchain(chain *block.BlockChain) {
+func printBlockchain(chainMutex *sync.Mutex, chain *blockchain.Blockchain) {
 	chainMutex.Lock()
 	defer chainMutex.Unlock()
 
@@ -124,21 +103,5 @@ func sendHelloRequest(clientPort string) {
 			}
 			fmt.Printf("Response from node at %s: %s", node, response)
 		}(node)
-	}
-}
-
-func handleClient(conn net.Conn, chain *block.BlockChain) {
-	fmt.Printf("Client connected: %s\n", conn.RemoteAddr().String())
-
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		receivedMsg := scanner.Text()
-		fmt.Printf("Received message from client: %s\n", receivedMsg)
-
-		handleCommand(receivedMsg, chain, conn)
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Println(err)
 	}
 }
