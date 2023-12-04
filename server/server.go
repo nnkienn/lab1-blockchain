@@ -26,8 +26,6 @@ func handleConnection(conn net.Conn) {
 
 		switch {
 		case strings.HasPrefix(command, "ADD_BLOCK"):
-			handleAddBlockCommand(command)
-		case strings.HasPrefix(command, "ADD_TRANSACTION"):
 			handleAddTransactionCommand(command)
 		case command == "PRINT_BLOCKCHAIN":
 			handlePrintBlockchainCommand()
@@ -40,34 +38,24 @@ func handleConnection(conn net.Conn) {
 		}
 	}
 }
+// server.go
+
+// ...
 
 func handleBuildMerkleTreeCommand(conn net.Conn) {
 	// Tạo Merkle Tree từ blockchain
 	merkleTree := bc.BuildMerkleTree()
 
 	// Gửi Merkle Root cho client
-	response := fmt.Sprintf("Merkle root: %x", merkleTree.Root.Data)
+	response := fmt.Sprintf("%x", merkleTree.Root.Data)
 	conn.Write([]byte(response + "\n"))
 
 	fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
 }
 
+// ...
 
-func handleAddBlockCommand(command string) {
-	// Example: ADD_BLOCK|transaction1,transaction2,transaction3
-	parts := strings.Split(command, "|")
-	transactionsData := strings.Split(parts[1], ",")
-	var transactions []*block.Transaction
-	for _, data := range transactionsData {
-		transactions = append(transactions, &block.Transaction{Data: []byte(data)})
-	}
 
-	mutex.Lock()
-	bc.AddBlock(transactions)
-	mutex.Unlock()
-
-	fmt.Println("Block added to the blockchain.")
-}
 
 func handleAddTransactionCommand(command string) {
 	// Example: ADD_TRANSACTION|transaction_data

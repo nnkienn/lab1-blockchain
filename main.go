@@ -76,27 +76,41 @@ func handlePrintBlockchainCommand() {
 }
 
 func handleQueryTransactionCommand(command string, conn net.Conn) {
-	// Example: QUERY_TRANSACTION|transaction_data
-	parts := strings.Split(command, "|")
-	transactionData := parts[1]
+    // Example: QUERY_TRANSACTION|transaction_data
+    parts := strings.Split(command, "|")
+    transactionData := parts[1]
 
-	mutex.Lock()
-	merkleProof := bc.CheckTransactionInMerkleTree(transactionData)
-	mutex.Unlock()
+    mutex.Lock()
+    merkleProof := bc.CheckTransactionInMerkleTree(transactionData)
+    merkleRoot := bc.BuildMerkleTree().Root.Data
+    mutex.Unlock()
 
-	response := fmt.Sprintf("Transaction verification result: %t", merkleProof)
-	conn.Write([]byte(response + "\n"))
+    // In ra giá trị Merkle Root để kiểm tra
+    fmt.Println("Merkle Root for verification:", merkleRoot)
+
+    // Chuyển đổi giá trị Merkle Root sang chuỗi hex để so sánh
+    receivedMerkleRootHex := fmt.Sprintf("%x", merkleRoot)
+
+    response := fmt.Sprintf("Transaction verification result: %t", merkleProof)
+    conn.Write([]byte(response + "\n"))
+
+    // Gửi Merkle Root cho client
+    conn.Write([]byte("Merkle root for verification: " + receivedMerkleRootHex + "\n"))
 }
 
+
 func handleBuildMerkleTreeCommand(conn net.Conn) {
-	// Tạo Merkle Tree từ blockchain
-	merkleTree := bc.BuildMerkleTree()
+    // Tạo Merkle Tree từ blockchain
+    merkleTree := bc.BuildMerkleTree()
 
-	// Gửi Merkle Root cho client
-	response := fmt.Sprintf("Merkle root: %x", merkleTree.Root.Data)
-	conn.Write([]byte(response + "\n"))
+    // In ra giá trị Merkle Root để kiểm tra
+    fmt.Println("Merkle Root:", merkleTree.Root.Data)
 
-	fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
+    // Gửi Merkle Root cho client
+    response := fmt.Sprintf("Merkle root: %x", merkleTree.Root.Data)
+    conn.Write([]byte(response + "\n"))
+
+    fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
 }
 
 func main() {

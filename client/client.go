@@ -9,14 +9,20 @@ import (
 	"strings"
 )
 
+// client.go
+
+// ...
+
 func receiveResponse(conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		response := scanner.Text()
 		fmt.Println("Server response:", response)
 
-		// Check if the response contains Merkle root information
-		if strings.HasPrefix(response, "Transaction verification result:") {
+		// Check if the response is a Merkle Root
+		if len(response) == 64 {
+			fmt.Println("Received Merkle Root:", response)
+		} else if strings.HasPrefix(response, "Transaction verification result:") {
 			parts := strings.Split(response, ":")
 			result := strings.TrimSpace(parts[1])
 
@@ -28,6 +34,14 @@ func receiveResponse(conn net.Conn) {
 		}
 	}
 }
+
+func buildMerkleTree(conn net.Conn) {
+	// Send the BUILD_MERKLE_TREE command
+	sendCommand(conn, "BUILD_MERKLE_TREE")
+}
+
+// ...
+
 
 func sendCommand(conn net.Conn, command string) {
 	_, err := conn.Write([]byte(command + "\n"))
@@ -48,10 +62,6 @@ func queryTransaction(conn net.Conn, transactionData string, merkleRoot string) 
 	sendCommand(conn, command)
 }
 
-func buildMerkleTree(conn net.Conn) {
-	// Send the BUILD_MERKLE_TREE command
-	sendCommand(conn, "BUILD_MERKLE_TREE")
-}
 
 func main() {
 	// Use flag to get the server port from the command line
