@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nnkienn/lab1-blockchain/blockchain"
+	"github.com/nnkienn/lab1-blockchain/block"
 )
 
 var bc = &block.BlockChain{}
