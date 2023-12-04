@@ -150,25 +150,25 @@ func (chain *BlockChain) BuildMerkleTree() *MerkleTree {
 }
 
 // CheckTransactionInMerkleTree kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
+// CheckTransactionInMerkleTree kiểm tra xem một giao dịch có tồn tại trong cây Merkle của blockchain hay không
 func (chain *BlockChain) CheckTransactionInMerkleTree(transactionData string) bool {
-	var transactions []*Transaction
+    var transactions []*Transaction
 
-	for _, block := range chain.Blocks {
-		transactions = append(transactions, block.Transactions...)
-	}
+    // Tập hợp tất cả các giao dịch trong blockchain
+    for _, block := range chain.Blocks {
+        transactions = append(transactions, block.Transactions...)
+    }
 
-	merkleRoot := CalculateMerkleRoot(transactions)
-	merkleTree := NewMerkleTree(transactions, merkleRoot)
+    // Tính toán Merkle root cho tất cả các giao dịch
+    merkleRoot := CalculateMerkleRoot(transactions)
 
-	// Tìm kiếm giao dịch trong cây Merkle
-	for _, transaction := range transactions {
-		if string(transaction.Data) == transactionData {
-			return merkleTree.CheckTransaction(transaction)
-		}
-	}
+    // Tạo cây Merkle cho tất cả các giao dịch
+    merkleTree := NewMerkleTree(transactions, merkleRoot)
 
-	return false
+    // Kiểm tra xem giao dịch có tồn tại trong cây Merkle hay không
+    return merkleTree.CheckTransaction(&Transaction{Data: []byte(transactionData)})
 }
+
 
 // CheckTransaction kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
 func (tree *MerkleTree) CheckTransaction(transaction *Transaction) bool {
