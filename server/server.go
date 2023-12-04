@@ -31,14 +31,25 @@ func handleConnection(conn net.Conn) {
 			handleAddTransactionCommand(command)
 		case command == "PRINT_BLOCKCHAIN":
 			handlePrintBlockchainCommand()
-		case command == "BUILD_MERKLE_TREE":
-			handleBuildMerkleTreeCommand(conn)
 		case strings.HasPrefix(command, "QUERY_TRANSACTION"):
 			handleQueryTransactionCommand(command, conn)
+		case command == "BUILD_MERKLE_TREE":
+			handleBuildMerkleTreeCommand(conn)
 		default:
 			fmt.Println("Unknown command:", command)
 		}
 	}
+}
+
+func handleBuildMerkleTreeCommand(conn net.Conn) {
+	// Tạo Merkle Tree từ blockchain
+	merkleTree := bc.BuildMerkleTree()
+
+	// Gửi Merkle Root cho client
+	response := fmt.Sprintf("Merkle root: %x", merkleTree.Root.Data)
+	conn.Write([]byte(response + "\n"))
+
+	fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
 }
 
 func handleAddBlockCommand(command string) {
@@ -75,24 +86,17 @@ func handlePrintBlockchainCommand() {
 	mutex.Unlock()
 }
 
-func handleBuildMerkleTreeCommand(conn net.Conn) {
-	// Tạo Merkle Tree từ blockchain
-	merkleTree := bc.BuildMerkleTree()
 
-	// Gửi Merkle Root cho client
-	response := fmt.Sprintf("Merkle root: %x", merkleTree.Root.Data)
-	conn.Write([]byte(response + "\n"))
-
-	fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
-}
 
 func handleQueryTransactionCommand(command string, conn net.Conn) {
 	// Example: QUERY_TRANSACTION|transaction_data
 	parts := strings.Split(command, "|")
 	transactionData := parts[1]
 
-	// Kiểm tra giao dịch trong Merkle Tree và gửi kết quả về client
+	mutex.Lock()
 	merkleProof := bc.CheckTransactionInMerkleTree(transactionData)
+	mutex.Unlock()
+
 	response := fmt.Sprintf("Transaction verification result: %t", merkleProof)
 	conn.Write([]byte(response + "\n"))
 }

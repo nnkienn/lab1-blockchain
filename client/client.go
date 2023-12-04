@@ -16,14 +16,14 @@ func receiveResponse(conn net.Conn) {
 		fmt.Println("Server response:", response)
 
 		// Check if the response contains Merkle root information
-		if strings.HasPrefix(response, "Merkle root:") {
+		if strings.HasPrefix(response, "Transaction verification result:") {
 			parts := strings.Split(response, ":")
-			serverMerkleRoot := strings.TrimSpace(parts[1])
+			result := strings.TrimSpace(parts[1])
 
-			if serverMerkleRoot == "Transaction does not exist in the Merkle tree." {
-				fmt.Println("Transaction does not exist in the Merkle tree.")
-			} else {
+			if result == "true" {
 				fmt.Println("Transaction exists in the Merkle tree.")
+			} else {
+				fmt.Println("Transaction does not exist in the Merkle tree.")
 			}
 		}
 	}
@@ -75,7 +75,10 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Print("Enter command: ")
-		scanner.Scan()
+		if !scanner.Scan() {
+			fmt.Println("Error reading from standard input:", scanner.Err())
+			break
+		}
 		command := scanner.Text()
 
 		if strings.HasPrefix(command, "CREATE_BLOCK") {
