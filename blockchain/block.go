@@ -22,13 +22,62 @@ type BlockChain struct {
 	Blocks []*Block
 }
 
+// MerkleNode đại diện cho một node trong cây Merkle
+type MerkleNode struct {
+	Left  *MerkleNode
+	Right *MerkleNode
+	Data  []byte
+}
+
+// MerkleTree đại diện cho cây Merkle
+type MerkleTree struct {
+	Root *MerkleNode
+}
+
+// NewMerkleTree tạo và trả về một cây Merkle mới
+func NewMerkleTree(transactions []*Transaction, merkleRoot []byte) *MerkleTree {
+	var nodes []*MerkleNode
+
+	// Tạo các nút lá
+	for _, transaction := range transactions {
+		nodes = append(nodes, &MerkleNode{Data: transaction.Data})
+	}
+
+	// Xây dựng cây Merkle từ nút lá
+	for len(nodes) > 1 {
+		var newLevel []*MerkleNode
+
+		for i := 0; i < len(nodes)-1; i += 2 {
+			combinedData := append(nodes[i].Data, nodes[i+1].Data...)
+			hash := sha256.Sum256(combinedData)
+
+			newNode := &MerkleNode{
+				Left:  nodes[i],
+				Right: nodes[i+1],
+				Data:  hash[:],
+			}
+
+			newLevel = append(newLevel, newNode)
+		}
+
+		if len(nodes)%2 != 0 {
+			// Nếu số lượng nút là số lẻ, thì thêm nút cuối cùng
+			newLevel = append(newLevel, nodes[len(nodes)-1])
+		}
+
+		nodes = newLevel
+	}
+
+	return &MerkleTree{Root: nodes[0]}
+}
+
 func (block *Block) setHash() {
 	headers := []byte(fmt.Sprintf("%x%x%d", block.PrevBlockHash, block.MerkleRoot, block.Timestamp))
 	hash := sha256.Sum256(headers)
 	block.Hash = hash[:]
 }
 
-func calculateMerkleRoot(transactions []*Transaction) []byte {
+func CalculateMerkleRoot(transactions []*Transaction) []byte {
 	var hashes [][]byte
 
 	for _, transaction := range transactions {
@@ -66,7 +115,7 @@ func (chain *BlockChain) AddBlock(transactions []*Transaction) {
 		Transactions:  transactions,
 	}
 
-	newBlock.MerkleRoot = calculateMerkleRoot(transactions) // Tính toán MerkleRoot
+	newBlock.MerkleRoot = CalculateMerkleRoot(transactions) // Tính toán MerkleRoot
 	newBlock.setHash()
 
 	chain.Blocks = append(chain.Blocks, newBlock)
@@ -84,4 +133,45 @@ func PrintBlockchain(chain *BlockChain) {
 		}
 		fmt.Printf("%x\n", block.Hash)
 	}
+}
+
+func (chain *BlockChain) BuildMerkleTree() *MerkleTree {
+	var transactions []*Transaction
+
+	for _, block := range chain.Blocks {
+		transactions = append(transactions, block.Transactions...)
+	}
+
+	merkleRoot := CalculateMerkleRoot(transactions)
+
+	// Tạo và trả về cây Merkle
+	return NewMerkleTree(transactions, merkleRoot)
+}
+
+// CheckTransactionInMerkleTree kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
+func (chain *BlockChain) CheckTransactionInMerkleTree(transactionData string) bool {
+	var transactions []*Transaction
+
+	for _, block := range chain.Blocks {
+		transactions = append(transactions, block.Transactions...)
+	}
+
+	merkleRoot := CalculateMerkleRoot(transactions)
+	merkleTree := NewMerkleTree(transactions, merkleRoot)
+
+	// Tìm kiếm giao dịch trong cây Merkle
+	for _, transaction := range transactions {
+		if string(transaction.Data) == transactionData {
+			return merkleTree.CheckTransaction(transaction)
+		}
+	}
+
+	return false
+}
+
+// CheckTransaction kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
+func (tree *MerkleTree) CheckTransaction(transaction *Transaction) bool {
+	// TODO: Implement the logic to check if the transaction exists in the Merkle Tree.
+	// You may need to traverse the tree and compare the transaction data.
+	return false
 }

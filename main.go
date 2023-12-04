@@ -5,70 +5,62 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"os"
 	"strings"
-	"sync"
 
-	"github.com/nnkienn/lab1-blockchain/blockchain"
 )
 
-var bc = &block.BlockChain{}
-var mutex = &sync.Mutex{}
-
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	fmt.Println("Accepted connection from", conn.RemoteAddr())
-
+func receiveResponse(conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
-		command := scanner.Text()
-		fmt.Println("Received command:", command)
+		response := scanner.Text()
+		fmt.Println("Server response:", response)
+	}
+}
 
-		switch {
-		case strings.HasPrefix(command, "ADD_BLOCK"):
-			handleAddBlockCommand(command)
-		case strings.HasPrefix(command, "ADD_TRANSACTION"):
-			handleAddTransactionCommand(command)
-		case command == "PRINT_BLOCKCHAIN":
-			handlePrintBlockchainCommand()
-		default:
-			fmt.Println("Unknown command:", command)
+func sendCommand(conn net.Conn, command string) {
+	_, err := conn.Write([]byte(command + "\n"))
+	if err != nil {
+		fmt.Println("Error sending command:", err)
+	}
+}
+
+func createBlock(conn net.Conn, transactions []string) {
+	// Gửi lệnh ADD_BLOCK|transaction1,transaction2,...
+	command := fmt.Sprintf("ADD_BLOCK|%s", strings.Join(transactions, ","))
+	sendCommand(conn, command)
+}
+
+func queryTransaction(conn net.Conn, transactionData string) {
+	// Gửi yêu cầu để tạo Merkle Tree từ blockchain
+	sendCommand(conn, "BUILD_MERKLE_TREE")
+
+	// Nhận Merkle Root từ server
+	scanner := bufio.NewScanner(conn)
+	var merkleRoot string
+	for scanner.Scan() {
+		response := scanner.Text()
+		fmt.Println("Server response:", response)
+
+		// Tách Merkle root từ dòng phản hồi
+		if strings.HasPrefix(response, "Merkle root:") {
+			parts := strings.Split(response, ":")
+			merkleRoot = strings.TrimSpace(parts[1])
+			break
 		}
 	}
+
+	// Gửi lệnh để kiểm tra giao dịch trong Merkle Tree
+	command := fmt.Sprintf("QUERY_TRANSACTION|%s|%s", merkleRoot, transactionData)
+	sendCommand(conn, command)
 }
 
-func handleAddBlockCommand(command string) {
-	// Example: ADD_BLOCK|transaction1,transaction2,transaction3
-	parts := strings.Split(command, "|")
-	transactionsData := strings.Split(parts[1], ",")
-	var transactions []*block.Transaction
-	for _, data := range transactionsData {
-		transactions = append(transactions, &block.Transaction{Data: []byte(data)})
-	}
+func buildMerkleTree(conn net.Conn) {
+	// Gửi yêu cầu để tạo Merkle Tree từ blockchain
+	sendCommand(conn, "BUILD_MERKLE_TREE")
 
-	mutex.Lock()
-	bc.AddBlock(transactions)
-	mutex.Unlock()
-
-	fmt.Println("Block added to the blockchain.")
-}
-
-func handleAddTransactionCommand(command string) {
-	// Example: ADD_TRANSACTION|transaction_data
-	parts := strings.Split(command, "|")
-	transactionData := parts[1]
-
-	mutex.Lock()
-	bc.AddBlock([]*block.Transaction{{Data: []byte(transactionData)}})
-	mutex.Unlock()
-
-	fmt.Println("Transaction added to the blockchain.")
-}
-
-func handlePrintBlockchainCommand() {
-	mutex.Lock()
-	block.PrintBlockchain(bc)
-	mutex.Unlock()
+	// Nhận và hiển thị Merkle Tree từ server
+	receiveResponse(conn)
 }
 
 func main() {
@@ -78,22 +70,41 @@ func main() {
 
 	serverAddress := fmt.Sprintf("localhost:%d", *port)
 
-	listener, err := net.Listen("tcp", serverAddress)
+	// Kết nối đến máy chủ
+	conn, err := net.Dial("tcp", serverAddress)
 	if err != nil {
-		fmt.Println("Error starting server:", err)
+		fmt.Println("Error connecting to server:", err)
 		return
 	}
-	defer listener.Close()
+	defer conn.Close()
 
-	fmt.Printf("Server started. Listening on :%d\n", *port)
+	fmt.Printf("Connected to server on port %d.\n", *port)
 
+	go receiveResponse(conn)
+
+	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection:", err)
-			continue
-		}
+		fmt.Print("Enter command: ")
+		scanner.Scan()
+		command := scanner.Text()
 
-		go handleConnection(conn)
+		if strings.HasPrefix(command, "CREATE_BLOCK") {
+			// Example: CREATE_BLOCK|transaction1,transaction2,transaction3
+			parts := strings.Split(command, "|")
+			transactions := strings.Split(parts[1], ",")
+			createBlock(conn, transactions)
+		} else if strings.HasPrefix(command, "QUERY_TRANSACTION") {
+			// Example: QUERY_TRANSACTION|transaction_data
+			parts := strings.Split(command, "|")
+			transactionData := parts[1]
+			queryTransaction(conn, transactionData)
+		} else if command == "BUILD_MERKLE_TREE" {
+			// Yêu cầu tạo Merkle Tree
+			buildMerkleTree(conn)
+		} else {
+			sendCommand(conn, command)
+		}
 	}
+
+	fmt.Println("Connection closed.")
 }
