@@ -1,3 +1,5 @@
+// block.go
+
 package block
 
 import (
@@ -20,7 +22,8 @@ type Transaction struct {
 }
 
 type BlockChain struct {
-	Blocks []*Block
+	Blocks  []*Block
+	Mempool []*Transaction // New field to represent the mempool
 }
 
 // MerkleNode đại diện cho một node trong cây Merkle
@@ -122,6 +125,11 @@ func (chain *BlockChain) AddBlock(transactions []*Transaction) {
 	chain.Blocks = append(chain.Blocks, newBlock)
 }
 
+// AddTransactionToMempool adds a transaction to the mempool of the blockchain
+func (chain *BlockChain) AddTransactionToMempool(transaction *Transaction) {
+	chain.Mempool = append(chain.Mempool, transaction)
+}
+
 func PrintBlockchain(chain *BlockChain) {
 	// In ra thông tin của blockchain
 	for _, block := range chain.Blocks {
@@ -152,23 +160,22 @@ func (chain *BlockChain) BuildMerkleTree() *MerkleTree {
 // CheckTransactionInMerkleTree kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
 // CheckTransactionInMerkleTree kiểm tra xem một giao dịch có tồn tại trong cây Merkle của blockchain hay không
 func (chain *BlockChain) CheckTransactionInMerkleTree(transactionData string) bool {
-    var transactions []*Transaction
+	var transactions []*Transaction
 
-    // Tập hợp tất cả các giao dịch trong blockchain
-    for _, block := range chain.Blocks {
-        transactions = append(transactions, block.Transactions...)
-    }
+	// Tập hợp tất cả các giao dịch trong blockchain
+	for _, block := range chain.Blocks {
+		transactions = append(transactions, block.Transactions...)
+	}
 
-    // Tính toán Merkle root cho tất cả các giao dịch
-    merkleRoot := CalculateMerkleRoot(transactions)
+	// Tính toán Merkle root cho tất cả các giao dịch
+	merkleRoot := CalculateMerkleRoot(transactions)
 
-    // Tạo cây Merkle cho tất cả các giao dịch
-    merkleTree := NewMerkleTree(transactions, merkleRoot)
+	// Tạo cây Merkle cho tất cả các giao dịch
+	merkleTree := NewMerkleTree(transactions, merkleRoot)
 
-    // Kiểm tra xem giao dịch có tồn tại trong cây Merkle hay không
-    return merkleTree.CheckTransaction(&Transaction{Data: []byte(transactionData)})
+	// Kiểm tra xem giao dịch có tồn tại trong cây Merkle hay không
+	return merkleTree.CheckTransaction(&Transaction{Data: []byte(transactionData)})
 }
-
 
 // CheckTransaction kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
 func (tree *MerkleTree) CheckTransaction(transaction *Transaction) bool {
