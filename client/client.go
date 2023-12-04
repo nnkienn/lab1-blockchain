@@ -15,10 +15,11 @@ func receiveResponse(conn net.Conn) {
 		response := scanner.Text()
 		fmt.Println("Server response:", response)
 
-		// Tách Merkle root từ dòng phản hồi
+		// Check if the response contains Merkle root information
 		if strings.HasPrefix(response, "Merkle root:") {
 			parts := strings.Split(response, ":")
 			serverMerkleRoot := strings.TrimSpace(parts[1])
+
 			if serverMerkleRoot == "Transaction does not exist in the Merkle tree." {
 				fmt.Println("Transaction does not exist in the Merkle tree.")
 			} else {
@@ -36,43 +37,30 @@ func sendCommand(conn net.Conn, command string) {
 }
 
 func createBlock(conn net.Conn, transactions []string) {
-	// Gửi lệnh ADD_BLOCK|transaction1,transaction2,...
+	// Send the ADD_BLOCK command with a list of transactions
 	command := fmt.Sprintf("ADD_BLOCK|%s", strings.Join(transactions, ","))
 	sendCommand(conn, command)
 }
 
-func queryTransaction(conn net.Conn, transactionData string) {
-	// Gửi yêu cầu để tạo Merkle Tree từ blockchain
-	sendCommand(conn, "BUILD_MERKLE_TREE")
-
-	// Nhận Merkle Root từ server
-	scanner := bufio.NewScanner(conn)
-	var merkleRoot string
-	for scanner.Scan() {
-		response := scanner.Text()
-		fmt.Println("Server response:", response)
-
-		// Tách Merkle root từ dòng phản hồi
-		if strings.HasPrefix(response, "Merkle root:") {
-			parts := strings.Split(response, ":")
-			merkleRoot = strings.TrimSpace(parts[1])
-			break
-		}
-	}
-
-	// Gửi lệnh để kiểm tra giao dịch trong Merkle Tree
+func queryTransaction(conn net.Conn, transactionData string, merkleRoot string) {
+	// Send the QUERY_TRANSACTION command with Merkle Root and Transaction Data
 	command := fmt.Sprintf("QUERY_TRANSACTION|%s|%s", merkleRoot, transactionData)
 	sendCommand(conn, command)
 }
 
+func buildMerkleTree(conn net.Conn) {
+	// Send the BUILD_MERKLE_TREE command
+	sendCommand(conn, "BUILD_MERKLE_TREE")
+}
+
 func main() {
-	// Sử dụng flag để nhận giá trị cổng từ dòng lệnh
+	// Use flag to get the server port from the command line
 	port := flag.Int("port", 8080, "Server port")
 	flag.Parse()
 
 	serverAddress := fmt.Sprintf("localhost:%d", *port)
 
-	// Kết nối đến máy chủ
+	// Connect to the server
 	conn, err := net.Dial("tcp", serverAddress)
 	if err != nil {
 		fmt.Println("Error connecting to server:", err)
@@ -96,10 +84,14 @@ func main() {
 			transactions := strings.Split(parts[1], ",")
 			createBlock(conn, transactions)
 		} else if strings.HasPrefix(command, "QUERY_TRANSACTION") {
-			// Example: QUERY_TRANSACTION|transaction_data
+			// Example: QUERY_TRANSACTION|merkleRoot|transaction_data
 			parts := strings.Split(command, "|")
-			transactionData := parts[1]
-			queryTransaction(conn, transactionData)
+			merkleRoot := parts[1]
+			transactionData := parts[2]
+			queryTransaction(conn, transactionData, merkleRoot)
+		} else if command == "BUILD_MERKLE_TREE" {
+			// Request to build the Merkle Tree
+			buildMerkleTree(conn)
 		} else {
 			sendCommand(conn, command)
 		}
