@@ -1,9 +1,9 @@
-package blockchain
+package block
 
 import (
 	"crypto/sha256"
-	"time"
 	"fmt"
+	"time"
 )
 
 type Block struct {
@@ -11,7 +11,7 @@ type Block struct {
 	Transactions  []*Transaction
 	PrevBlockHash []byte
 	Hash          []byte
-	MerkleRoot    []byte // Thêm MerkleRoot vào cấu trúc Block
+	MerkleRoot    []byte // Thêm trường MerkleRoot
 }
 
 type Transaction struct {
@@ -23,22 +23,9 @@ type BlockChain struct {
 }
 
 func (block *Block) setHash() {
-	headers := []byte(string(block.PrevBlockHash) + string(block.MerkleRoot) + string(block.Timestamp)) // Sử dụng MerkleRoot thay vì HashTransactions
+	headers := []byte(fmt.Sprintf("%x%x%d", block.PrevBlockHash, block.MerkleRoot, block.Timestamp))
 	hash := sha256.Sum256(headers)
 	block.Hash = hash[:]
-}
-
-func HashTransactions(transactions []*Transaction) []byte {
-	var hashTransactions []byte
-
-	for _, transaction := range transactions {
-		hashTransaction := sha256.Sum256(transaction.Data)
-		hashTransactions = append(hashTransactions, hashTransaction[:]...)
-	}
-
-	finalHash := sha256.Sum256(hashTransactions)
-
-	return finalHash[:]
 }
 
 func calculateMerkleRoot(transactions []*Transaction) []byte {
