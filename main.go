@@ -5,10 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"net"
-
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/nnkienn/lab1-blockchain/blockchain"
 )
@@ -31,7 +29,7 @@ func handleConnection(conn net.Conn) {
 			handleAddBlockCommand(command)
 		case strings.HasPrefix(command, "ADD_TRANSACTION"):
 			handleAddTransactionCommand(command)
-		case strings.HasPrefix(command, "PRINT_BLOCKCHAIN"):
+		case command == "PRINT_BLOCKCHAIN":
 			handlePrintBlockchainCommand()
 		default:
 			fmt.Println("Unknown command:", command)
@@ -88,15 +86,6 @@ func main() {
 	defer listener.Close()
 
 	fmt.Printf("Server started. Listening on :%d\n", *port)
-
-	go func() {
-		for {
-			time.Sleep(10 * time.Second) // In blockchain mỗi 10 giây
-			mutex.Lock()
-			block.PrintBlockchain(bc)
-			mutex.Unlock()
-		}
-	}()
 
 	for {
 		conn, err := listener.Accept()

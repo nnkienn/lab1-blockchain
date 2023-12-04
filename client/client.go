@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"strings"
-
 )
 
 func receiveResponse(conn net.Conn) {
@@ -15,6 +14,17 @@ func receiveResponse(conn net.Conn) {
 	for scanner.Scan() {
 		response := scanner.Text()
 		fmt.Println("Server response:", response)
+
+		// Tách Merkle root từ dòng phản hồi
+		if strings.HasPrefix(response, "Merkle root:") {
+			parts := strings.Split(response, ":")
+			serverMerkleRoot := strings.TrimSpace(parts[1])
+			if serverMerkleRoot == "Transaction does not exist in the Merkle tree." {
+				fmt.Println("Transaction does not exist in the Merkle tree.")
+			} else {
+				fmt.Println("Transaction exists in the Merkle tree.")
+			}
+		}
 	}
 }
 
@@ -31,28 +41,28 @@ func createBlock(conn net.Conn, transactions []string) {
 	sendCommand(conn, command)
 }
 
-func queryTransaction(conn net.Conn, merkleRoot string) {
-	// Gửi lệnh PRINT_BLOCKCHAIN để tra cứu Merkle tree
-	sendCommand(conn, "PRINT_BLOCKCHAIN")
+func queryTransaction(conn net.Conn, transactionData string) {
+	// Gửi yêu cầu để tạo Merkle Tree từ blockchain
+	sendCommand(conn, "BUILD_MERKLE_TREE")
 
-	// Chờ nhận phản hồi từ server
+	// Nhận Merkle Root từ server
 	scanner := bufio.NewScanner(conn)
+	var merkleRoot string
 	for scanner.Scan() {
 		response := scanner.Text()
-		fmt.Println(response)
+		fmt.Println("Server response:", response)
 
 		// Tách Merkle root từ dòng phản hồi
 		if strings.HasPrefix(response, "Merkle root:") {
 			parts := strings.Split(response, ":")
-			serverMerkleRoot := strings.TrimSpace(parts[1])
-			if serverMerkleRoot == merkleRoot {
-				fmt.Println("Transaction exists in the Merkle tree.")
-			} else {
-				fmt.Println("Transaction does not exist in the Merkle tree.")
-			}
+			merkleRoot = strings.TrimSpace(parts[1])
 			break
 		}
 	}
+
+	// Gửi lệnh để kiểm tra giao dịch trong Merkle Tree
+	command := fmt.Sprintf("QUERY_TRANSACTION|%s|%s", merkleRoot, transactionData)
+	sendCommand(conn, command)
 }
 
 func main() {
@@ -86,10 +96,10 @@ func main() {
 			transactions := strings.Split(parts[1], ",")
 			createBlock(conn, transactions)
 		} else if strings.HasPrefix(command, "QUERY_TRANSACTION") {
-			// Example: QUERY_TRANSACTION|merkleRoot
+			// Example: QUERY_TRANSACTION|transaction_data
 			parts := strings.Split(command, "|")
-			merkleRoot := parts[1]
-			queryTransaction(conn, merkleRoot)
+			transactionData := parts[1]
+			queryTransaction(conn, transactionData)
 		} else {
 			sendCommand(conn, command)
 		}
