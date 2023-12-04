@@ -33,6 +33,8 @@ func handleConnection(conn net.Conn) {
 			handlePrintBlockchainCommand()
 		case strings.HasPrefix(command, "QUERY_TRANSACTION"):
 			handleQueryTransactionCommand(command, conn)
+		case command == "BUILD_MERKLE_TREE":
+			handleBuildMerkleTreeCommand(conn)
 		default:
 			fmt.Println("Unknown command:", command)
 		}
@@ -84,6 +86,17 @@ func handleQueryTransactionCommand(command string, conn net.Conn) {
 
 	response := fmt.Sprintf("Transaction verification result: %t", merkleProof)
 	conn.Write([]byte(response + "\n"))
+}
+
+func handleBuildMerkleTreeCommand(conn net.Conn) {
+	// Tạo Merkle Tree từ blockchain
+	merkleTree := bc.BuildMerkleTree()
+
+	// Gửi Merkle Root cho client
+	response := fmt.Sprintf("Merkle root: %x", merkleTree.Root.Data)
+	conn.Write([]byte(response + "\n"))
+
+	fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
 }
 
 func main() {

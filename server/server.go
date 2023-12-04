@@ -31,10 +31,10 @@ func handleConnection(conn net.Conn) {
 			handleAddTransactionCommand(command)
 		case command == "PRINT_BLOCKCHAIN":
 			handlePrintBlockchainCommand()
-		case strings.HasPrefix(command, "QUERY_TRANSACTION"):
-			handleQueryTransactionCommand(command, conn)
 		case command == "BUILD_MERKLE_TREE":
 			handleBuildMerkleTreeCommand(conn)
+		case strings.HasPrefix(command, "QUERY_TRANSACTION"):
+			handleQueryTransactionCommand(command, conn)
 		default:
 			fmt.Println("Unknown command:", command)
 		}
@@ -51,6 +51,7 @@ func handleBuildMerkleTreeCommand(conn net.Conn) {
 
 	fmt.Println("Merkle Tree built. Merkle Root sent to the client.")
 }
+
 
 func handleAddBlockCommand(command string) {
 	// Example: ADD_BLOCK|transaction1,transaction2,transaction3

@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"time"
@@ -171,7 +172,23 @@ func (chain *BlockChain) CheckTransactionInMerkleTree(transactionData string) bo
 
 // CheckTransaction kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không
 func (tree *MerkleTree) CheckTransaction(transaction *Transaction) bool {
-	// TODO: Implement the logic to check if the transaction exists in the Merkle Tree.
-	// You may need to traverse the tree and compare the transaction data.
-	return false
+	return tree.checkTransaction(tree.Root, transaction.Data)
+}
+
+// checkTransaction kiểm tra xem một giao dịch có tồn tại trong cây Merkle hay không (hàm đệ quy)
+func (tree *MerkleTree) checkTransaction(node *MerkleNode, transactionData []byte) bool {
+	if node == nil {
+		return false
+	}
+
+	// Nếu là nút lá, so sánh dữ liệu giao dịch
+	if node.Left == nil && node.Right == nil {
+		return bytes.Equal(node.Data, transactionData)
+	}
+
+	// Nếu không phải nút lá, kiểm tra ở cả hai phía của cây
+	leftResult := tree.checkTransaction(node.Left, transactionData)
+	rightResult := tree.checkTransaction(node.Right, transactionData)
+
+	return leftResult || rightResult
 }
