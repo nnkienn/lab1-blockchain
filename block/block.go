@@ -21,8 +21,27 @@ type Transaction struct {
 	Data []byte
 }
 
-type Blockchain struct {
-	Blocks []*Block
+// BlockChain represents a blockchain
+type BlockChain struct {
+	Blocks  []*Block
+	Mempool []*Transaction
+}
+
+// GetMempoolTransactions returns transactions from the mempool
+func (chain *BlockChain) GetMempoolTransactions() []*Transaction {
+	return chain.Mempool
+}
+
+// AddTransactionToMempool adds a transaction to the mempool
+func (chain *BlockChain) AddTransactionToMempool(transaction *Transaction) {
+	chain.Mempool = append(chain.Mempool, transaction)
+}
+
+// MineBlock mines a block with transactions from the mempool
+func (chain *BlockChain) MineBlock() {
+	blockData := chain.GetMempoolTransactions()
+	chain.AddBlock(blockData)
+	chain.Mempool = []*Transaction{} // Clear the mempool after mining
 }
 
 // MerkleNode represents a node in the Merkle tree
@@ -77,31 +96,40 @@ func (block *Block) SetHash() {
 	block.Hash = hash[:]
 }
 
+// CalculateMerkleRoot tính toán Merkle Root từ danh sách giao dịch
 func CalculateMerkleRoot(transactions []*Transaction) []byte {
-	var hashes [][]byte
-
-	for _, transaction := range transactions {
-		hashTransaction := sha256.Sum256(transaction.Data)
-		hashes = append(hashes, hashTransaction[:])
+	if len(transactions) == 0 {
+		return nil
 	}
 
-	for len(hashes) > 1 {
-		var levelHashes [][]byte
-		for i := 0; i < len(hashes)-1; i += 2 {
-			combined := append(hashes[i], hashes[i+1]...)
-			hash := sha256.Sum256(combined)
-			levelHashes = append(levelHashes, hash[:])
-		}
-		if len(hashes)%2 != 0 {
-			levelHashes = append(levelHashes, hashes[len(hashes)-1])
-		}
-		hashes = levelHashes
+	var merkleTree [][]byte
+
+	for _, tx := range transactions {
+		merkleTree = append(merkleTree, tx.Data)
 	}
 
-	return hashes[0]
+	for len(merkleTree) > 1 {
+		var newMerkleTree [][]byte
+		for i := 0; i < len(merkleTree); i += 2 {
+			left := merkleTree[i]
+			right := merkleTree[i+1]
+			concatenation := append(left, right...)
+			hash := sha256.Sum256(concatenation)
+			newMerkleTree = append(newMerkleTree, hash[:])
+		}
+		// Nếu số lượng node là lẻ, duplicate node cuối cùng
+		if len(merkleTree)%2 != 0 {
+			lastNode := merkleTree[len(merkleTree)-1]
+			hash := sha256.Sum256(append(lastNode, lastNode...))
+			newMerkleTree = append(newMerkleTree, hash[:])
+		}
+		merkleTree = newMerkleTree
+	}
+
+	return merkleTree[0]
 }
 
-func (chain *Blockchain) AddBlock(transactions []*Transaction) {
+func (chain *BlockChain) AddBlock(transactions []*Transaction) {
 	var preBlockHash []byte
 
 	chainSize := len(chain.Blocks)
@@ -121,7 +149,7 @@ func (chain *Blockchain) AddBlock(transactions []*Transaction) {
 	chain.Blocks = append(chain.Blocks, newBlock)
 }
 
-func (chain *Blockchain) PrintBlockchain() {
+func (chain *BlockChain) PrintBlockchain() {
 	for _, block := range chain.Blocks {
 		fmt.Printf("Timestamp: %d\n", block.Timestamp)
 		fmt.Printf("Prev. hash: %x\n", block.PrevBlockHash)
@@ -135,7 +163,7 @@ func (chain *Blockchain) PrintBlockchain() {
 	}
 }
 
-func (chain *Blockchain) BuildMerkleTree() *MerkleTree {
+func (chain *BlockChain) BuildMerkleTree() *MerkleTree {
 	var transactions []*Transaction
 
 	for _, block := range chain.Blocks {
@@ -147,7 +175,7 @@ func (chain *Blockchain) BuildMerkleTree() *MerkleTree {
 	return NewMerkleTree(transactions, merkleRoot)
 }
 
-func (chain *Blockchain) CheckTransactionInMerkleTree(transactionData string) bool {
+func (chain *BlockChain) CheckTransactionInMerkleTree(transactionData string) bool {
 	var transactions []*Transaction
 
 	for _, block := range chain.Blocks {

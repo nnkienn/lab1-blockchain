@@ -14,13 +14,14 @@ import (
 
 var mutex = &sync.Mutex{}
 
-// P2PNode đại diện cho một nút trong mô hình P2P
-	type P2PNode struct {
-		ServerAddress string
-		BlockChain    *block.BlockChain
-	}
+// P2PNode represents a node in the P2P model
+type P2PNode struct {
+	ServerAddress string
+	BlockChain    *block.BlockChain
+	Peers         map[string]struct{} // Keep track of connected peers
+}
 
-// StartP2PServer khởi động một server P2P cho nút
+// StartP2PServer starts a P2P server for the node
 func (node *P2PNode) StartP2PServer() {
 	listener, err := net.Listen("tcp", node.ServerAddress)
 	if err != nil {
@@ -42,58 +43,58 @@ func (node *P2PNode) StartP2PServer() {
 	}
 }
 
-// handleP2PConnection xử lý kết nối P2P đến nút
+// handleP2PConnection handles P2P connection to the node
 func (node *P2PNode) handleP2PConnection(conn net.Conn) {
 	defer conn.Close()
+
+	peerAddress := conn.RemoteAddr().String()
+	node.Peers[peerAddress] = struct{}{}
 
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {
 		commandStr := scanner.Text()
-		fmt.Println("Received P2P command:", commandStr)
+		fmt.Println("Received P2P command from", peerAddress+":", commandStr)
 
 		command, args := parseP2PCommand(commandStr)
 		node.executeP2PCommand(command, args, conn)
 	}
 }
 
-// parseP2PCommand phân tích một lệnh P2P từ một chuỗi
+// parseP2PCommand parses a P2P command from a string
 func parseP2PCommand(commandStr string) (string, []string) {
 	parts := strings.Split(commandStr, "|")
-	command := parts[0]
-	args := parts[1:]
-	return command, args
+	return parts[0], parts[1:]
 }
 
-// executeP2PCommand thực thi một lệnh P2P
+// executeP2PCommand executes a P2P command
 func (node *P2PNode) executeP2PCommand(command string, args []string, conn net.Conn) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	switch command {
 	case "ADD_BLOCK":
-		// Example: ADD_BLOCK|timestamp|prevBlockHash|merkleRoot|transaction1,transaction2,transaction3
-		timestamp := args[0]
-		prevBlockHash := args[1]
-		merkleRoot := args[2]
-		transactions := strings.Split(args[3], ",")
-
-		node.addBlockToChain(timestamp, prevBlockHash, merkleRoot, transactions)
+		node.addBlockToChain(args)
 	case "REQUEST_CHAIN":
-		// Example: REQUEST_CHAIN
 		node.sendBlockChain(conn)
 	case "RECEIVE_CHAIN":
-		// Example: RECEIVE_CHAIN|block1|block2|...
-		blocks := args
-		node.receiveBlockChain(blocks)
+		node.receiveBlockChainFromPeer(conn.RemoteAddr().String(), args)
+	case "QUERY_TRANSACTION":
+		node.queryTransaction(args[0], conn)
 	default:
 		fmt.Println("Unknown P2P command:", command)
 	}
 }
 
-// addBlockToChain thêm một block mới vào blockchain của nút
-// addBlockToChain thêm một block mới vào blockchain của nút
-func (node *P2PNode) addBlockToChain(timestamp, prevBlockHash, merkleRoot string, transactions []string) {
-	// Convert string parameters to appropriate types
+// addBlockToChain adds a new block to the node's blockchain
+func (node *P2PNode) addBlockToChain(args []string) {
+	if len(args) != 4 {
+		fmt.Println("Invalid ADD_BLOCK command format")
+		return
+	}
+
+	timestamp, prevBlockHash, merkleRoot, transactions := args[0], args[1], args[2], strings.Split(args[3], ",")
 	timestampInt, _ := strconv.ParseInt(timestamp, 10, 64)
 
-	// Create Block and add to the blockchain
 	newBlock := &block.Block{
 		Timestamp:     timestampInt,
 		PrevBlockHash: []byte(prevBlockHash),
@@ -101,11 +102,11 @@ func (node *P2PNode) addBlockToChain(timestamp, prevBlockHash, merkleRoot string
 		Transactions:  createTransactions(transactions),
 	}
 
-	// Add the block to the blockchain
-	node.BlockChain.AddBlock([]*block.Block{newBlock})
+	node.BlockChain.AddBlock(newBlock.Transactions)
+	node.sendBlockChainToPeers()
 }
 
-// createTransactions tạo một danh sách các giao dịch từ các chuỗi đầu vào
+// createTransactions creates a list of transactions from input strings
 func createTransactions(transactionStrings []string) []*block.Transaction {
 	var transactions []*block.Transaction
 	for _, transactionString := range transactionStrings {
@@ -114,14 +115,14 @@ func createTransactions(transactionStrings []string) []*block.Transaction {
 	return transactions
 }
 
-// sendBlockChain gửi blockchain của nút đến một kết nối P2P
+// sendBlockChain sends the node's blockchain to a P2P connection
 func (node *P2PNode) sendBlockChain(conn net.Conn) {
 	chain := node.BlockChain
 	chainString := serializeBlockchain(chain)
 	conn.Write([]byte("RECEIVE_CHAIN|" + chainString + "\n"))
 }
 
-// serializeBlockchain chuyển đổi blockchain thành một chuỗi
+// serializeBlockchain converts blockchain to a string
 func serializeBlockchain(chain *block.BlockChain) string {
 	var result string
 	for _, blk := range chain.Blocks {
@@ -130,58 +131,96 @@ func serializeBlockchain(chain *block.BlockChain) string {
 	return result
 }
 
-// serializeBlock chuyển đổi một block thành một chuỗi
+// serializeBlock converts a block to a string
 func serializeBlock(blk *block.Block) string {
 	return fmt.Sprintf("%d|%x|%x|%x|", blk.Timestamp, blk.PrevBlockHash, blk.MerkleRoot, serializeTransactions(blk.Transactions))
 }
 
-// serializeTransactions chuyển đổi danh sách giao dịch thành một chuỗi
+// serializeTransactions converts a list of transactions to a string
+// serializeTransactions chuyển đổi một danh sách giao dịch thành một chuỗi
 func serializeTransactions(transactions []*block.Transaction) string {
 	var result string
 	for _, transaction := range transactions {
 		result += string(transaction.Data) + ","
 	}
-	return result[:len(result)-1] // Remove the trailing comma
+	if len(result) > 0 {
+		result = result[:len(result)-1] // Loại bỏ dấu phẩy ở cuối
+	}
+	return result
 }
 
-// receiveBlockChain nhận blockchain từ một chuỗi và cập nhật blockchain của nút
-func (node *P2PNode) receiveBlockChain(blocks []string) {
+
+// receiveBlockChainFromPeer receives a blockchain from a peer and updates the node's blockchain
+// receiveBlockChainFromPeer receives a blockchain from a peer and updates the node's blockchain
+func (node *P2PNode) receiveBlockChainFromPeer(peerAddress string, blocks []string) {
 	for _, blockString := range blocks {
 		timestamp, prevBlockHash, merkleRoot, transactions := parseBlockString(blockString)
 
 		// Convert timestamp to string
 		timestampStr := strconv.FormatInt(timestamp, 10)
 
-		node.addBlockToChain(timestampStr, prevBlockHash, merkleRoot, transactions)
+		// Pass data as a single slice to addBlockToChain
+		node.addBlockToChain([]string{timestampStr, prevBlockHash, merkleRoot, strings.Join(transactions, ",")})
 	}
+
+	fmt.Printf("Blockchain updated from peer %s\n", peerAddress)
 }
 
 // parseBlockString phân tích một chuỗi thành các giá trị cần thiết cho một block
 func parseBlockString(blockString string) (int64, string, string, []string) {
-	parts := strings.Split(blockString, "|")
+	parts := strings.SplitN(blockString, "|", 4)
+	if len(parts) != 4 {
+		// Xử lý trường hợp chuỗi khối không chứa đủ phần
+		fmt.Println("Định dạng chuỗi khối không hợp lệ:", blockString)
+		return 0, "", "", nil
+	}
 	timestamp, prevBlockHash, merkleRoot := parts[0], parts[1], parts[2]
 	transactions := strings.Split(parts[3], ",")
 	return parseTimestamp(timestamp), prevBlockHash, merkleRoot, transactions
 }
 
-// parseTimestamp phân tích một chuỗi timestamp thành một giá trị int64
+
+// parseTimestamp parses a timestamp string into an int64 value
 func parseTimestamp(timestamp string) int64 {
 	timestampInt, _ := strconv.ParseInt(timestamp, 10, 64)
 	return timestampInt
 }
 
-// main
-func main() {
-	node := &P2PNode{
-		ServerAddress: "localhost:3000",
-		BlockChain:    &block.BlockChain{Blocks: []*block.Block{}},
+// queryTransaction queries a transaction based on the Merkle tree
+func (node *P2PNode) queryTransaction(transactionData string, conn net.Conn) {
+	var response string
+	if node.BlockChain != nil {
+		exists := node.BlockChain.CheckTransactionInMerkleTree(transactionData)
+		response = "TRANSACTION_QUERY_RESULT|" + strconv.FormatBool(exists)
+	} else {
+		response = "TRANSACTION_QUERY_RESULT|false"
 	}
 
-	// Start P2P server
+	if conn != nil {
+		conn.Write([]byte(response + "\n"))
+	} else {
+		fmt.Println(response)
+	}
+}
+
+
+// main
+func main() {
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: go run main.go <port>")
+		return
+	}
+
+	port := os.Args[1]
+	node := &P2PNode{
+		ServerAddress: "localhost:" + port,
+		BlockChain:    &block.BlockChain{Blocks: []*block.Block{}},
+		Peers:         make(map[string]struct{}),
+	}
+
 	go node.StartP2PServer()
 
-	// Interact with the user through the console
-	fmt.Println("P2P server is running. Enter commands:")
+	fmt.Println("P2P server is running on port", port+". Enter commands:")
 
 	for {
 		reader := bufio.NewReader(os.Stdin)
@@ -196,34 +235,40 @@ func main() {
 			data, _ := reader.ReadString('\n')
 			data = strings.TrimSpace(data)
 			node.addTransactionToMempool(data)
+			node.sendBlockChainToPeers()
 		case "MINE_BLOCK":
 			node.mineBlock()
+			node.sendBlockChainToPeers()
 		case "CONNECT":
 			fmt.Print("Enter address to connect (e.g., localhost:3001): ")
 			address, _ := reader.ReadString('\n')
 			address = strings.TrimSpace(address)
 			go node.connectToPeer(address)
+		case "QUERY_TRANSACTION":
+			fmt.Print("Enter transaction data to query: ")
+			data, _ := reader.ReadString('\n')
+			data = strings.TrimSpace(data)
+			node.queryTransaction(data, nil)
 		default:
 			fmt.Println("Unknown command:", command)
 		}
 	}
 }
-
-// addTransactionToMempool thêm một giao dịch mới vào mempool của nút
+// addTransactionToMempool adds a new transaction to the node's mempool
 func (node *P2PNode) addTransactionToMempool(data string) {
 	transaction := &block.Transaction{Data: []byte(data)}
 	node.BlockChain.AddTransactionToMempool(transaction)
 	fmt.Println("Transaction added to mempool.")
 }
 
-// mineBlock khai thác một block từ mempool và thêm vào blockchain
+// mineBlock mines a block from the mempool and adds it to the blockchain
 func (node *P2PNode) mineBlock() {
-	blockData := node.BlockChain.GetMempoolTransactions()
-	node.BlockChain.MineBlock(blockData)
+	node.BlockChain.MineBlock()
 	fmt.Println("Block mined and added to the blockchain.")
+	node.sendBlockChainToPeers()
 }
 
-// connectToPeer kết nối đến một địa chỉ peer
+// connectToPeer connects to a peer address
 func (node *P2PNode) connectToPeer(address string) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -232,13 +277,37 @@ func (node *P2PNode) connectToPeer(address string) {
 	}
 	defer conn.Close()
 
+	// Add the connected peer to the list
+	node.Peers[address] = struct{}{}
+
 	fmt.Printf("Connected to peer at %s\n", address)
 
-	// Send a request for the peer's blockchain
+	// Request the peer's blockchain
 	conn.Write([]byte("REQUEST_CHAIN\n"))
 }
 
-// printBlockchain in ra thông tin của blockchain
+// sendBlockChainToPeers sends the node's blockchain to all connected peers
+func (node *P2PNode) sendBlockChainToPeers() {
+	for peer := range node.Peers {
+		node.sendBlockChainToPeer(peer)
+	}
+}
+
+// sendBlockChainToPeer sends the node's blockchain to a specific peer
+func (node *P2PNode) sendBlockChainToPeer(peerAddress string) {
+	conn, err := net.Dial("tcp", peerAddress)
+	if err != nil {
+		fmt.Println("Error connecting to peer:", err)
+		return
+	}
+	defer conn.Close()
+
+	chain := node.BlockChain
+	chainString := serializeBlockchain(chain)
+	conn.Write([]byte("RECEIVE_CHAIN|" + chainString + "\n"))
+}
+
+// printBlockchain prints information about the blockchain
 func printBlockchain(chain *block.BlockChain) {
 	for _, blk := range chain.Blocks {
 		fmt.Printf("Timestamp: %d\n", blk.Timestamp)
